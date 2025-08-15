@@ -16,7 +16,6 @@ export default function DashboardContent({ userName }: DashboardContentProps) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleUploadSuccess = () => {
-    // Trigger a refresh of the PDFs list
     setRefreshKey((prev) => prev + 1);
   };
 

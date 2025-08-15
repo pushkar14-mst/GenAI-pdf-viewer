@@ -35,8 +35,9 @@ model PDF {
   uploadedAt   DateTime @default(now())
   userId       String   @db.ObjectId
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chats Chat[]
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chats      Chat[]
+  extraction PDFExtraction?
 }
 
 model Chat {
@@ -47,9 +48,10 @@ model Chat {
   userId    String   @db.ObjectId
   pdfId     String?  @db.ObjectId
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pdf      PDF?      @relation(fields: [pdfId], references: [id], onDelete: SetNull)
-  messages Message[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pdf         PDF?         @relation(fields: [pdfId], references: [id], onDelete: SetNull)
+  messages    Message[]
+  annotations Annotation[]
 }
 
 model Message {
@@ -61,11 +63,53 @@ model Message {
   pageNumber  Int?
   annotations Json?
 
-  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chat               Chat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  relatedAnnotations Annotation[]
+}
+
+model PDFExtraction {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  pdfId         String   @unique @db.ObjectId
+  extractedText String
+  pageTexts     String // JSON string of page-by-page text
+  totalPages    Int
+  createdAt     DateTime @default(now())
+
+  pdf PDF @relation(fields: [pdfId], references: [id], onDelete: Cascade)
+}
+
+model Annotation {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  pdfId       String           @db.ObjectId
+  chatId      String?          @db.ObjectId
+  messageId   String?          @db.ObjectId
+  type        AnnotationType
+  pageNumber  Int
+  coordinates Json // Stores position data
+  content     String? // Text content or comment
+  style       Json? // Color, opacity, etc.
+  createdBy   AnnotationSource
+  createdAt   DateTime         @default(now())
+
+  chat    Chat?    @relation(fields: [chatId], references: [id], onDelete: SetNull)
+  message Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
 }
 
 enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+}
+
+enum AnnotationType {
+  HIGHLIGHT
+  AREA
+  CIRCLE
+  ARROW
+  NOTE
+}
+
+enum AnnotationSource {
+  USER
+  AI
 }

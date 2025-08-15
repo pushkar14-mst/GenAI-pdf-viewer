@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,10 +16,18 @@ import {
   Sparkles,
   FileText,
   MessageSquare,
+  Highlighter,
+  Navigation,
+  Eye,
 } from "lucide-react";
+import type { PDFDisplayRef } from "./pdf-display";
 
 interface ChatInterfaceProps {
   pdfId: string;
+  pdfDisplayRef: React.RefObject<PDFDisplayRef | null>;
+  onHighlightRequest?: (highlights: any[]) => void;
+  onPageNavigate?: (page: number) => void;
+  onAnnotationControl?: (action: string, data?: any) => void;
 }
 
 interface Message {
@@ -28,13 +36,17 @@ interface Message {
   content: string;
   timestamp: Date;
   pageReference?: number;
-  annotations?: {
-    type: "highlight" | "circle";
-    coordinates: { x: number; y: number; width: number; height: number };
-  }[];
+  annotations?: any[];
+  pdfControls?: any[];
 }
 
-export function ChatInterface({ pdfId }: ChatInterfaceProps) {
+export function ChatInterface({
+  pdfId,
+  pdfDisplayRef,
+  onHighlightRequest,
+  onPageNavigate,
+  onAnnotationControl,
+}: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -52,7 +64,6 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  // Load existing chats when component mounts
   useEffect(() => {
     loadExistingChats();
   }, [pdfId]);
@@ -60,34 +71,27 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
   const loadExistingChats = async () => {
     try {
       setIsLoading(true);
-
-      // First, get all chats for this PDF
       const chatsResponse = await fetch(`/api/pdf/${pdfId}/chats`);
-      if (!chatsResponse.ok) {
-        throw new Error("Failed to fetch chats");
-      }
+      if (!chatsResponse.ok) throw new Error("Failed to fetch chats");
 
       const chatsData = await chatsResponse.json();
 
       if (chatsData.chats && chatsData.chats.length > 0) {
-        // Load the most recent chat
         const mostRecentChat = chatsData.chats[0];
         setChatId(mostRecentChat.id);
 
-        // Get the full chat history
         const chatResponse = await fetch(`/api/chat/${mostRecentChat.id}`);
         if (chatResponse.ok) {
           const chatData = await chatResponse.json();
-
           const loadedMessages: Message[] = chatData.chat.messages.map(
             (msg: any) => ({
               id: msg.id,
-              role: msg.role,
+              role: msg.role.toLowerCase(),
               content: msg.content,
               timestamp: new Date(msg.timestamp),
+              annotations: msg.annotations ? JSON.parse(msg.annotations) : [],
             })
           );
-
           setMessages(loadedMessages);
         }
       } else {
@@ -95,21 +99,42 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
           {
             id: "welcome",
             role: "assistant",
-            content:
-              "Hi! I'm your AI tutor. I'm ready to help you understand this PDF document. Ask me anything about the content, and I can provide explanations and insights!",
+            content: `Hi! I'm your **AI Tutor** with PDF control capabilities! 🎓
+
+I can:
+- 📖 Answer questions about your document
+- 🎯 **Highlight specific text** as we discuss
+- 📍 **Navigate to relevant pages** 
+- 🔍 **Create visual annotations**
+- 💡 Provide context-aware explanations
+
+Try asking me something like:
+- "What's the main argument on page 3?"
+- "Highlight the key findings and navigate to them"
+- "Show me the methodology section with highlights"  
+- "Find and highlight the word 'conclusion' in this document"
+- "Navigate to page 2 and highlight any important terms"
+
+**🎯 I can actually control the PDF!** Watch as I:
+- ✨ Find and highlight exact text on the pages
+- 📍 Navigate to specific pages automatically  
+- 🎨 Show visual annotations with explanations
+
+**Test it:** Try saying "highlight the word 'the' on this page" to see the highlighting in action!
+
+Let's explore this document together!`,
             timestamp: new Date(),
           },
         ]);
       }
     } catch (error) {
       console.error("Failed to load existing chats:", error);
-      // Fallback to welcome message
       setMessages([
         {
-          id: "welcome",
+          id: "welcome-error",
           role: "assistant",
           content:
-            "Hi! I'm your AI tutor. I'm ready to help you understand this PDF document. Ask me anything about the content, and I can provide explanations and insights!",
+            "Welcome! I'm ready to help you understand this PDF with enhanced annotation capabilities!",
           timestamp: new Date(),
         },
       ]);
@@ -124,7 +149,7 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: newMessage.trim(),
+      content: newMessage,
       timestamp: new Date(),
     };
 
@@ -152,7 +177,6 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
 
       const data = await response.json();
 
-      // Update chatId if this is a new chat or first message
       if (data.chatId && data.chatId !== chatId) {
         setChatId(data.chatId);
       }
@@ -162,26 +186,39 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
         role: "assistant",
         content: data.aiMessage.content,
         timestamp: new Date(data.aiMessage.timestamp),
+        annotations: data.aiMessage.annotations || [],
+        pdfControls: data.pdfControls || [],
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+
+      // Process AI commands for PDF control and highlighting
+      processAICommands(
+        data.aiMessage.annotations || [],
+        data.pdfControls || []
+      );
+
+      if (data.createdAnnotations && data.createdAnnotations.length > 0) {
+        onHighlightRequest?.(data.createdAnnotations);
+      }
     } catch (error) {
-      console.error("Failed to send message:", error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content:
-          "I'm sorry, I encountered an error while processing your message. Please try again.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      console.error("Error sending message:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: "⚠️ Something went wrong. Please try again.",
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsSending(false);
       setIsTyping(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -192,23 +229,74 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
     setIsRecording(!isRecording);
   };
 
+  const processAICommands = useCallback(
+    (annotations: any[], pdfControls: any[]) => {
+      pdfControls?.forEach((control) => {
+        if (control.action === "navigate" && control.page) {
+          onPageNavigate?.(control.page);
+        } else if (control.action === "clear") {
+          pdfDisplayRef.current?.clearHighlights();
+        }
+      });
+
+      annotations?.forEach((annotation) => {
+        if (annotation.action === "highlight" && annotation.text) {
+          pdfDisplayRef.current?.addHighlight(
+            annotation.text,
+            annotation.page || 1,
+            annotation.color || "#ffff00",
+            annotation.comment || ""
+          );
+        }
+      });
+    },
+    [onPageNavigate, pdfDisplayRef]
+  );
+
+  const handleQuickAction = (action: string) => {
+    const actionMessages = {
+      summarize:
+        "Please provide a summary of this document with key highlights",
+      explain:
+        "Explain the main concepts in this document with visual annotations",
+      quiz: "Create a quiz based on this document and highlight relevant sections",
+      navigate:
+        "Guide me through the document structure and important sections",
+    };
+
+    setNewMessage(
+      actionMessages[action as keyof typeof actionMessages] || action
+    );
+  };
+
   return (
     <div className="h-full flex flex-col bg-white border-l border-gray-200 overflow-hidden">
       <div className="border-b border-gray-200 p-4">
         <div className="flex items-center gap-3">
           <Avatar className="w-10 h-10">
-            <AvatarFallback className="bg-blue-100">
-              <Bot className="w-5 h-5 text-blue-600" />
+            <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+              <Bot className="w-5 h-5" />
             </AvatarFallback>
           </Avatar>
           <div>
-            <h3 className="font-semibold text-gray-900">AI Tutor</h3>
-            <p className="text-sm text-gray-500">Ready to help you learn</p>
+            <h2 className="text-lg font-semibold">AI Tutor</h2>
+            <div className="flex gap-2">
+              <Badge
+                variant="outline"
+                className="text-xs text-green-600 bg-green-50"
+              >
+                <Eye className="w-3 h-3 mr-1" />
+                PDF Control
+              </Badge>
+              <Badge
+                variant="outline"
+                className="text-xs text-blue-600 bg-blue-50"
+              >
+                <Highlighter className="w-3 h-3 mr-1" />
+                Annotations
+              </Badge>
+            </div>
           </div>
-          <Badge variant="secondary" className="ml-auto">
-            <Sparkles className="w-3 h-3 mr-1" />
-            Active
-          </Badge>
         </div>
       </div>
 
@@ -218,17 +306,17 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
             <div className="flex items-center justify-center py-8">
               <div className="space-y-4 text-center">
                 <div className="flex items-center gap-2 justify-center">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
                   <div
-                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                    className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
                     style={{ animationDelay: "0.1s" }}
-                  ></div>
+                  />
                   <div
                     className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
                     style={{ animationDelay: "0.2s" }}
-                  ></div>
+                  />
                 </div>
-                <p className="text-sm text-gray-500">Loading chat history...</p>
+                <p className="text-sm text-gray-500">Loading chat...</p>
               </div>
             </div>
           ) : (
@@ -242,36 +330,58 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
                 >
                   {message.role === "assistant" && (
                     <Avatar className="w-8 h-8 mt-1">
-                      <AvatarFallback className="bg-blue-100">
-                        <Bot className="w-4 h-4 text-blue-600" />
+                      <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+                        <Bot className="w-4 h-4" />
                       </AvatarFallback>
                     </Avatar>
                   )}
 
-                  <div
-                    className={`max-w-[85%] rounded-lg px-4 py-3 ${
-                      message.role === "user"
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-100 text-gray-900"
-                    }`}
-                  >
-                    <p className="text-sm leading-relaxed">{message.content}</p>
+                  <div className="max-w-[85%] space-y-2">
+                    <div
+                      className={`rounded-lg px-4 py-3 ${
+                        message.role === "user"
+                          ? "bg-blue-500 text-white"
+                          : "bg-gray-100 text-gray-900"
+                      }`}
+                    >
+                      <div
+                        className="text-sm leading-relaxed whitespace-pre-wrap"
+                        dangerouslySetInnerHTML={{
+                          __html: message.content
+                            .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                            .replace(/\*(.*?)\*/g, "<em>$1</em>")
+                            .replace(
+                              /`(.*?)`/g,
+                              "<code class='bg-black/10 px-1 py-0.5 rounded text-xs'>$1</code>"
+                            ),
+                        }}
+                      />
 
-                    {message.pageReference && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <FileText className="w-3 h-3 opacity-70" />
-                        <span className="text-xs opacity-70">
-                          Reference: Page {message.pageReference}
+                      <div className="mt-2 text-xs opacity-70">
+                        {message.timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Show annotation indicators */}
+                    {message.annotations && message.annotations.length > 0 && (
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <Highlighter className="w-3 h-3" />
+                        <span>
+                          {message.annotations.length} annotation(s) added
                         </span>
                       </div>
                     )}
 
-                    <div className="mt-2 text-xs opacity-70">
-                      {message.timestamp.toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
+                    {/* Show PDF control indicators */}
+                    {message.pdfControls && message.pdfControls.length > 0 && (
+                      <div className="flex items-center gap-1 text-xs text-blue-600">
+                        <Navigation className="w-3 h-3" />
+                        <span>PDF controls applied</span>
+                      </div>
+                    )}
                   </div>
 
                   {message.role === "user" && (
@@ -287,8 +397,8 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
               {isTyping && (
                 <div className="flex gap-3 justify-start">
                   <Avatar className="w-8 h-8 mt-1">
-                    <AvatarFallback className="bg-blue-100">
-                      <Bot className="w-4 h-4 text-blue-600" />
+                    <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+                      <Bot className="w-4 h-4" />
                     </AvatarFallback>
                   </Avatar>
                   <div className="bg-gray-100 rounded-lg px-4 py-3">
@@ -312,38 +422,56 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
         </div>
       </ScrollArea>
 
+      {/* Input Area */}
       <div className="border-t border-gray-200 p-4">
         <div className="space-y-3">
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs">
-              <FileText className="w-3 h-3 mr-1" />
-              Summarize
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs">
-              <MessageSquare className="w-3 h-3 mr-1" />
-              Explain this section
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => handleQuickAction("summarize")}
+            >
               <Sparkles className="w-3 h-3 mr-1" />
-              Quiz me
+              Summarize & Highlight
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => handleQuickAction("explain")}
+            >
+              <MessageSquare className="w-3 h-3 mr-1" />
+              Explain & Annotate
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => handleQuickAction("navigate")}
+            >
+              <Navigation className="w-3 h-3 mr-1" />
+              Guide Me
             </Button>
           </div>
 
+          {/* Message Input */}
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Textarea
+                placeholder="Ask me anything about the PDF - I can highlight and navigate for you!"
+                className="min-h-[40px] pr-10 resize-none"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Ask me anything about this document..."
-                className="min-h-[80px] resize-none pr-12"
-                disabled={isSending}
+                onKeyDown={handleKeyDown}
+                disabled={isSending || isLoading}
               />
               <Button
                 variant="ghost"
-                size="sm"
-                className="absolute bottom-2 right-2"
+                size="icon"
+                className="absolute right-2 top-1/2 -translate-y-1/2"
                 onClick={toggleRecording}
+                disabled={isSending || isLoading}
               >
                 {isRecording ? (
                   <MicOff className="w-4 h-4 text-red-500" />
@@ -355,15 +483,15 @@ export function ChatInterface({ pdfId }: ChatInterfaceProps) {
 
             <Button
               onClick={handleSendMessage}
-              disabled={!newMessage.trim() || isSending}
-              className="self-end"
+              disabled={!newMessage.trim() || isSending || isLoading}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
             >
               <Send className="w-4 h-4" />
             </Button>
           </div>
 
           <p className="text-xs text-gray-500 text-center">
-            AI can make mistakes. Verify important information.
+            🎯 AI with PDF annotation & navigation capabilities
           </p>
         </div>
       </div>

@@ -6,9 +6,8 @@ if (!process.env.GEMINI_API_KEY) {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Get the Gemini Pro model
 export const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemma-3n-e2b-it",
   generationConfig: {
     temperature: 0.7,
     topP: 0.8,

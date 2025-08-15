@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { PDFDisplay } from "./pdf-display";
+import type { IHighlight, PDFDisplayRef } from "./pdf-display";
 import { ChatInterface } from "./chat-interface";
 
 interface PDFViewerContentProps {
@@ -39,6 +40,9 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
   const [rotation, setRotation] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [highlights, setHighlights] = useState<IHighlight[]>([]);
+  const [pdfText, setPdfText] = useState<string>("");
+  const pdfDisplayRef = useRef<PDFDisplayRef>(null);
 
   useEffect(() => {
     const fetchPDFData = async () => {
@@ -55,7 +59,20 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
       }
     };
 
+    const extractPDFText = async () => {
+      try {
+        const response = await fetch(`/api/pdf/${pdfId}/extract`);
+        if (response.ok) {
+          const data = await response.json();
+          setPdfText(data.text);
+        }
+      } catch (error) {
+        console.error("Failed to extract PDF text:", error);
+      }
+    };
+
     fetchPDFData();
+    extractPDFText();
   }, [pdfId]);
 
   const handlePDFLoadSuccess = ({ numPages }: { numPages: number }) => {
@@ -126,10 +143,8 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
         >
           <ResizablePanel defaultSize={60} minSize={40}>
             <div className="h-full flex flex-col bg-white">
-              {/* PDF Controls */}
               <div className="border-b border-gray-200 px-4 py-3">
                 <div className="flex items-center justify-between">
-                  {/* Navigation Controls */}
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
@@ -191,17 +206,23 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
                 </div>
               </div>
 
-              {/* PDF Display Area */}
               <div className="flex-1 overflow-hidden bg-gray-100">
                 <ScrollArea className="h-full">
                   <div className="p-6 flex justify-center">
                     <PDFDisplay
+                      ref={pdfDisplayRef}
                       pdfId={pdfId}
                       currentPage={currentPage}
                       zoom={zoom}
                       rotation={rotation}
                       isLoading={isLoading}
                       onLoadSuccess={handlePDFLoadSuccess}
+                      aiHighlights={highlights}
+                      onHighlightChange={setHighlights}
+                      onPageChange={setCurrentPage}
+                      onTextExtracted={(text, page) => {
+                        console.log(`Page ${page} text extracted`);
+                      }}
                     />
                   </div>
                 </ScrollArea>
@@ -211,20 +232,30 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
 
           <ResizableHandle withHandle />
 
-          {/* Chat Panel */}
           <ResizablePanel defaultSize={40} minSize={30}>
-            <ChatInterface pdfId={pdfId} />
+            <ChatInterface
+              pdfId={pdfId}
+              pdfDisplayRef={pdfDisplayRef}
+              onHighlightRequest={(newHighlights) => {
+                setHighlights((prev) => [...prev, ...newHighlights]);
+              }}
+              onPageNavigate={(page) => {
+                setCurrentPage(page);
+                pdfDisplayRef.current?.navigateToPage(page);
+              }}
+              onAnnotationControl={(action, data) => {
+                if (action === "clear") {
+                  pdfDisplayRef.current?.clearHighlights();
+                }
+              }}
+            />
           </ResizablePanel>
         </ResizablePanelGroup>
 
-        {/* Mobile Layout */}
         <div className="md:hidden h-full flex flex-col">
-          {/* Mobile PDF View */}
           <div className="flex-1 bg-white">
-            {/* PDF Controls */}
             <div className="border-b border-gray-200 px-4 py-3">
               <div className="flex items-center justify-between">
-                {/* Navigation Controls */}
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -251,7 +282,6 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
                   </Button>
                 </div>
 
-                {/* Zoom Controls */}
                 <div className="flex items-center gap-1">
                   <Button variant="outline" size="sm" onClick={handleZoomOut}>
                     <ZoomOut className="w-4 h-4" />
@@ -264,23 +294,28 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
               </div>
             </div>
 
-            {/* Mobile PDF Display */}
             <div className="flex-1 overflow-hidden bg-gray-100">
               <ScrollArea className="h-full">
                 <div className="p-4">
                   <PDFDisplay
+                    ref={pdfDisplayRef}
                     pdfId={pdfId}
                     currentPage={currentPage}
                     zoom={zoom}
                     rotation={rotation}
                     isLoading={isLoading}
                     onLoadSuccess={handlePDFLoadSuccess}
+                    aiHighlights={highlights}
+                    onHighlightChange={setHighlights}
+                    onPageChange={setCurrentPage}
+                    onTextExtracted={(text, page) => {
+                      console.log(`Page ${page} text extracted`);
+                    }}
                   />
                 </div>
               </ScrollArea>
             </div>
 
-            {/* Mobile Chat Toggle */}
             <div className="border-t border-gray-200 p-3">
               <Button className="w-full" variant="outline">
                 <MessageSquare className="w-4 h-4 mr-2" />

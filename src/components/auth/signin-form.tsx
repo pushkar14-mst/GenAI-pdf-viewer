@@ -62,7 +62,6 @@ export function SignInForm() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        // Refresh the session to get the latest user data
         await getSession();
         router.push("/dashboard");
         router.refresh();
