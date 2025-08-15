@@ -92,12 +92,12 @@ export const PDFDisplay = forwardRef<PDFDisplayRef, PDFDisplayProps>(
     const [error, setError] = useState<string | null>(null);
     const [loadingPage, setLoadingPage] = useState(true);
     const [highlights, setHighlights] = useState<IHighlight[]>(aiHighlights);
-    const [pageTextContent, setPageTextContent] = useState<Map<number, any>>(
-      new Map()
-    );
+    const [pageTextContent, setPageTextContent] = useState<
+      Map<number, Record<string, unknown>>
+    >(new Map());
 
     const pdfUrl = `/api/pdf/${pdfId}`;
-    const pageRef = useRef<any>(null);
+    const pageRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       configurePDFJS();
@@ -270,13 +270,18 @@ export const PDFDisplay = forwardRef<PDFDisplayRef, PDFDisplayProps>(
     }, []);
 
     const onPageLoadSuccessHandler = useCallback(
-      async (page: any) => {
+      async (page: unknown) => {
         setLoadingPage(false);
 
         try {
-          const textContent = await page.getTextContent();
+          const textContent = await (
+            page as { getTextContent: () => Promise<unknown> }
+          ).getTextContent();
           setPageTextContent(
-            (prev) => new Map(prev.set(currentPage, textContent))
+            (prev) =>
+              new Map(
+                prev.set(currentPage, textContent as Record<string, unknown>)
+              )
           );
         } catch (error) {
           console.error("Failed to extract text content:", error);

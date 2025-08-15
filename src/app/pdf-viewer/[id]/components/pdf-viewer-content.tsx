@@ -33,7 +33,7 @@ interface PDFViewerContentProps {
 }
 
 export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
-  const [pdfData, setPdfData] = useState<any>(null);
+  const [pdfData, setPdfData] = useState<Record<string, unknown> | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [zoom, setZoom] = useState(100);
@@ -41,7 +41,7 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [highlights, setHighlights] = useState<IHighlight[]>([]);
-  const [pdfText, setPdfText] = useState<string>("");
+
   const pdfDisplayRef = useRef<PDFDisplayRef>(null);
 
   useEffect(() => {
@@ -220,9 +220,6 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
                       aiHighlights={highlights}
                       onHighlightChange={setHighlights}
                       onPageChange={setCurrentPage}
-                      onTextExtracted={(text, page) => {
-                        console.log(`Page ${page} text extracted`);
-                      }}
                     />
                   </div>
                 </ScrollArea>
@@ -237,7 +234,10 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
               pdfId={pdfId}
               pdfDisplayRef={pdfDisplayRef}
               onHighlightRequest={(newHighlights) => {
-                setHighlights((prev) => [...prev, ...newHighlights]);
+                setHighlights((prev) => [
+                  ...prev,
+                  ...(newHighlights as unknown as IHighlight[]),
+                ]);
               }}
               onPageNavigate={(page) => {
                 setCurrentPage(page);
@@ -308,9 +308,6 @@ export function PDFViewerContent({ pdfId }: PDFViewerContentProps) {
                     aiHighlights={highlights}
                     onHighlightChange={setHighlights}
                     onPageChange={setCurrentPage}
-                    onTextExtracted={(text, page) => {
-                      console.log(`Page ${page} text extracted`);
-                    }}
                   />
                 </div>
               </ScrollArea>

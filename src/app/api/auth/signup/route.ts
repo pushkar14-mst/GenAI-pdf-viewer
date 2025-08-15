@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const { password: _, ...userWithoutPassword } = user;
+    const { password: pwd, ...userWithoutPassword } = user;
 
     return NextResponse.json(
       {

@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { model } from "@/lib/gemini";
 import { prisma } from "@/lib/prisma";
-import { AnnotationType, AnnotationSource } from "@prisma/client";
 
 // Enhanced AI prompt with PDF control capabilities
 const createEnhancedSystemPrompt = (
@@ -85,7 +84,7 @@ const cleanupMarkdownResponse = (response: string): string => {
 
 const extractAnnotationCommands = (response: string) => {
   const annotationRegex = /```annotation\s*([\s\S]*?)\s*```/g;
-  const annotations: any[] = [];
+  const annotations: Record<string, unknown>[] = [];
   let match;
 
   while ((match = annotationRegex.exec(response)) !== null) {

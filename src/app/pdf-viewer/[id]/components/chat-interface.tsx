@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,7 +13,6 @@ import {
   Bot,
   User,
   Sparkles,
-  FileText,
   MessageSquare,
   Highlighter,
   Navigation,
@@ -25,9 +23,9 @@ import type { PDFDisplayRef } from "./pdf-display";
 interface ChatInterfaceProps {
   pdfId: string;
   pdfDisplayRef: React.RefObject<PDFDisplayRef | null>;
-  onHighlightRequest?: (highlights: any[]) => void;
+  onHighlightRequest?: (highlights: Record<string, unknown>[]) => void;
   onPageNavigate?: (page: number) => void;
-  onAnnotationControl?: (action: string, data?: any) => void;
+  onAnnotationControl?: (action: string, data?: unknown) => void;
 }
 
 interface Message {
@@ -36,8 +34,8 @@ interface Message {
   content: string;
   timestamp: Date;
   pageReference?: number;
-  annotations?: any[];
-  pdfControls?: any[];
+  annotations?: Record<string, unknown>[];
+  pdfControls?: Record<string, unknown>[];
 }
 
 export function ChatInterface({
@@ -84,12 +82,14 @@ export function ChatInterface({
         if (chatResponse.ok) {
           const chatData = await chatResponse.json();
           const loadedMessages: Message[] = chatData.chat.messages.map(
-            (msg: any) => ({
-              id: msg.id,
-              role: msg.role.toLowerCase(),
-              content: msg.content,
-              timestamp: new Date(msg.timestamp),
-              annotations: msg.annotations ? JSON.parse(msg.annotations) : [],
+            (msg: Record<string, unknown>) => ({
+              id: msg.id as string,
+              role: (msg.role as string).toLowerCase(),
+              content: msg.content as string,
+              timestamp: new Date(msg.timestamp as string),
+              annotations: msg.annotations
+                ? JSON.parse(msg.annotations as string)
+                : [],
             })
           );
           setMessages(loadedMessages);
@@ -230,10 +230,13 @@ Let's explore this document together!`,
   };
 
   const processAICommands = useCallback(
-    (annotations: any[], pdfControls: any[]) => {
+    (
+      annotations: Record<string, unknown>[],
+      pdfControls: Record<string, unknown>[]
+    ) => {
       pdfControls?.forEach((control) => {
         if (control.action === "navigate" && control.page) {
-          onPageNavigate?.(control.page);
+          onPageNavigate?.(control.page as number);
         } else if (control.action === "clear") {
           pdfDisplayRef.current?.clearHighlights();
         }
@@ -242,10 +245,10 @@ Let's explore this document together!`,
       annotations?.forEach((annotation) => {
         if (annotation.action === "highlight" && annotation.text) {
           pdfDisplayRef.current?.addHighlight(
-            annotation.text,
-            annotation.page || 1,
-            annotation.color || "#ffff00",
-            annotation.comment || ""
+            annotation.text as string,
+            (annotation.page as number) || 1,
+            (annotation.color as string) || "#ffff00",
+            (annotation.comment as string) || ""
           );
         }
       });
@@ -254,7 +257,7 @@ Let's explore this document together!`,
   );
 
   const handleQuickAction = (action: string) => {
-    const actionMessages = {
+    const actionMessages: Record<string, string> = {
       summarize:
         "Please provide a summary of this document with key highlights",
       explain:

@@ -6,18 +6,22 @@ import { AnnotationType, AnnotationSource } from "@prisma/client";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = (await getServerSession(authOptions)) as {
+      user: { id: string };
+    } | null;
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
+
     // Verify PDF ownership
     const pdf = await prisma.pDF.findFirst({
       where: {
-        id: params.id,
+        id: id,
         userId: session.user.id,
       },
     });
@@ -29,7 +33,7 @@ export async function GET(
     // Get all annotations for this PDF
     const annotations = await prisma.annotation.findMany({
       where: {
-        pdfId: params.id,
+        pdfId: id,
       },
       orderBy: {
         createdAt: "desc",
@@ -48,10 +52,12 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = (await getServerSession(authOptions)) as {
+      user: { id: string };
+    } | null;
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -67,10 +73,12 @@ export async function POST(
       messageId,
     } = await req.json();
 
+    const { id } = await params;
+
     // Verify PDF ownership
     const pdf = await prisma.pDF.findFirst({
       where: {
-        id: params.id,
+        id: id,
         userId: session.user.id,
       },
     });
@@ -82,7 +90,7 @@ export async function POST(
     // Create the annotation
     const annotation = await prisma.annotation.create({
       data: {
-        pdfId: params.id,
+        pdfId: id,
         type: type as AnnotationType,
         pageNumber,
         coordinates,
@@ -106,14 +114,17 @@ export async function POST(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = (await getServerSession(authOptions)) as {
+      user: { id: string };
+    } | null;
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
     const { searchParams } = new URL(req.url);
     const annotationId = searchParams.get("annotationId");
 
@@ -128,7 +139,7 @@ export async function DELETE(
     const annotation = await prisma.annotation.findFirst({
       where: {
         id: annotationId,
-        pdfId: params.id,
+        pdfId: id,
       },
       include: {
         chat: {

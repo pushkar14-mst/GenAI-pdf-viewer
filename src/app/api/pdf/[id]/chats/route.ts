@@ -5,16 +5,18 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check authentication
-    const session = await getServerSession(authOptions);
+    const session = (await getServerSession(authOptions)) as {
+      user: { id: string };
+    } | null;
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const pdfId = params.id;
+    const { id: pdfId } = await params;
 
     // Verify PDF ownership
     const pdf = await prisma.pDF.findFirst({

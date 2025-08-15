@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Trash2, Download, Eye } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { FileText, Trash2, Eye } from "lucide-react";
 
 interface PDFCardProps {
   id: string;
