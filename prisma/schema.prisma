@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String?
+  email         String    @unique
+  password      String
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  pdfs  PDF[]
+  chats Chat[]
+}
+
+model PDF {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  filename     String
+  originalName String
+  fileSize     Int
+  mimeType     String
+  data         Bytes
+  uploadedAt   DateTime @default(now())
+  userId       String   @db.ObjectId
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chats Chat[]
+}
+
+model Chat {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String   @db.ObjectId
+  pdfId     String?  @db.ObjectId
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pdf      PDF?      @relation(fields: [pdfId], references: [id], onDelete: SetNull)
+  messages Message[]
+}
+
+model Message {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  content     String
+  role        MessageRole
+  createdAt   DateTime    @default(now())
+  chatId      String      @db.ObjectId
+  pageNumber  Int?
+  annotations Json?
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
